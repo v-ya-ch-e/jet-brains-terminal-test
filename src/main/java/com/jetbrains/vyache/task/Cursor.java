@@ -49,6 +49,14 @@ public class Cursor {
         return col;
     }
 
+    public boolean isAtEndOfLine() {
+        return col == terminalBuffer.getWidth() - 1;
+    }
+
+    public boolean isAtEndOfScreen() {
+        return row == terminalBuffer.getHeight() - 1 && isAtEndOfLine();
+    }
+
     // Moving the cursor
 
     public void moveUp(int n) {
@@ -65,6 +73,21 @@ public class Cursor {
 
     public void moveRight(int n) {
         col = Math.min(terminalBuffer.getWidth() - 1, col + n);
+    }
+
+    public void moveLeftWrapped(int n) {
+        row = Math.floorMod(row + Math.floorDiv((col - n), terminalBuffer.getWidth()), terminalBuffer.getHeight());
+        col = Math.floorMod((col - n), terminalBuffer.getWidth());
+    }
+
+    public void moveRightWrapped(int n) {
+        row = (row + (col + n) / terminalBuffer.getWidth()) % terminalBuffer.getHeight();
+        col = (col + n) % terminalBuffer.getWidth();
+    }
+
+    public void moveNextLineWrapped() {
+        row = (row + 1) % terminalBuffer.getHeight();
+        col = 0;
     }
 
     // Attribute management
@@ -91,5 +114,12 @@ public class Cursor {
 
     public void setCurrentStyles(StyleFlag... flags) {
         this.currentAttributes = this.currentAttributes.withStyles(flags);
+    }
+
+    public int getDistanceTo(Cursor other) {
+        if(other == null || other.terminalBuffer != terminalBuffer) {
+            return Integer.MAX_VALUE;
+        }
+        return (other.row - row)*terminalBuffer.getWidth() - col + other.col;
     }
 }

@@ -1,6 +1,8 @@
 package com.jetbrains.vyache.task;
 
 import java.util.ArrayDeque;
+import java.util.LinkedList;
+import java.util.List;
 
 public class TerminalBuffer {
 
@@ -108,5 +110,74 @@ public class TerminalBuffer {
 
     public CellAttributes getCurrentAttributes() {
         return this.cursor.getCurrentAttributes();
+    }
+
+    // Content access
+
+    public Cell getCellAt(int row, int col) {
+        return screen[row][col];
+    }
+
+    public Cell getCellAtCursor() {
+        return getCellAt(cursor.getRow(), cursor.getCol());
+    }
+
+    // Editing
+
+    private void shiftEverythingRight(int n) {
+        int originalCol = cursor.getCol();
+        int originalRow = cursor.getRow();
+        
+        Cursor shifter = new Cursor(this, originalRow, originalCol);
+        int counter = n;
+        List<Character> characters = new LinkedList<>();
+
+        while (counter > 0 && !shifter.isAtEndOfScreen()) {
+            if (getCellAt(shifter.getRow(), shifter.getCol()).isEmpty()) {
+                counter--;
+            }
+            else {
+                counter++;
+                characters.add(getCellAt(shifter.getRow(), shifter.getCol()).character());
+            }
+            shifter.moveRightWrapped(1);
+        }
+        cursor.moveRightWrapped(n);
+        for(char c : characters) {
+            writeCharacter(c);
+        }
+        cursor.setPosition(originalRow, originalCol);
+    }
+
+    public void writeCharacter(char c) {
+        if(cursor.isAtEndOfScreen()) {
+            return; // TODO: Scroll up
+        }
+        screen[cursor.getRow()][cursor.getCol()] = new Cell(c, cursor.getCurrentAttributes());
+        cursor.moveRightWrapped(1);
+    }
+
+    public void writeText(String text) {
+        for (char c : text.toCharArray()) {
+            writeCharacter(c);
+        }
+    }
+
+    public void insertCharacter(char c) {
+        shiftEverythingRight(1);
+        writeCharacter(c);
+    }
+
+    public void insertText(String text) {
+        int shift = text.length();
+        shiftEverythingRight(shift);
+        writeText(text);
+    }
+
+    public void fillLine(char c) {
+        for (int i = 0; i < width; i++) {
+            screen[cursor.getRow()][i] = new Cell(c, cursor.getCurrentAttributes());
+            cursor.moveNextLineWrapped();
+        }
     }
 }
