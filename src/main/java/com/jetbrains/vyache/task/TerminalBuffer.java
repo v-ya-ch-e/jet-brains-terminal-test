@@ -3,6 +3,7 @@ package com.jetbrains.vyache.task;
 import java.util.ArrayDeque;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Arrays;
 
 public class TerminalBuffer {
 
@@ -18,10 +19,8 @@ public class TerminalBuffer {
         this.height = height;
         this.maxScrollbackSize = maxScrollbackSize;
         this.screen = new Cell[height][width];
-        for (int i = 0; i < height; i++) {
-            for (int j = 0; j < width; j++) {
-                this.screen[i][j] = Cell.EMPTY;
-            }
+        for(int i = 0; i < height; i++) {
+            Arrays.fill(screen[i], Cell.EMPTY);
         }
         this.scrollback = new ScrollbackRingBuffer(maxScrollbackSize);
         this.cursor = new Cursor(this, cursorRow, cursorCol, initialAttributes);
@@ -128,7 +127,7 @@ public class TerminalBuffer {
         return getCellAt(cursor.getRow(), cursor.getCol());
     }
 
-    // Editing
+    // Editing regarding the cursor position
 
     private void shiftEverythingRight(int n) {
         int originalCol = cursor.getCol();
@@ -185,5 +184,27 @@ public class TerminalBuffer {
             screen[cursor.getRow()][i] = new Cell(c, cursor.getCurrentAttributes());
             cursor.moveNextLineWrapped();
         }
+    }
+
+    // Editing regarding the scrollback
+
+    public void insertLineAtBottom() {
+        scrollback.add(screen[0]);
+        for(int i = 0; i < height - 1; i++) {
+            screen[i] = screen[i + 1];
+        }
+        screen[height - 1] = new Cell[width];
+        Arrays.fill(screen[height - 1], Cell.EMPTY);
+    }
+
+    public void clearScreen() {
+        for(int i = 0; i < height; i++) {
+            Arrays.fill(screen[i], Cell.EMPTY);
+        }
+    }
+
+    public void clearAll() {
+        clearScreen();
+        scrollback.clear();
     }
 }

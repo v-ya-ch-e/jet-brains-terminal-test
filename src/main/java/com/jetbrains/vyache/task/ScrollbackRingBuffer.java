@@ -12,6 +12,15 @@ public class ScrollbackRingBuffer {
         this.buffer = new Cell[capacity][];
     }
 
+    public void clear() {
+        for(int i = 0; i < capacity; i++) {
+            buffer[i] = null;
+        }
+        head = 0;
+        tail = 0;
+        size = 0;
+    }
+
     public void add(Cell[] element) {
         buffer[tail] = element;
         tail = (tail + 1) % capacity;
