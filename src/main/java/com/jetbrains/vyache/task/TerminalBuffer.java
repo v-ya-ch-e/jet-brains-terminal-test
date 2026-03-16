@@ -10,7 +10,7 @@ public class TerminalBuffer {
     private final int height;
     private final int maxScrollbackSize;
     private final Cell[][] screen;
-    private final ArrayDeque<Cell[]> scrollback;
+    private final ScrollbackRingBuffer scrollback;
     private final Cursor cursor;
 
     public TerminalBuffer(int width, int height, int maxScrollbackSize, int cursorRow, int cursorCol, CellAttributes initialAttributes) {
@@ -23,7 +23,7 @@ public class TerminalBuffer {
                 this.screen[i][j] = Cell.EMPTY;
             }
         }
-        this.scrollback = new ArrayDeque<>(maxScrollbackSize);
+        this.scrollback = new ScrollbackRingBuffer(maxScrollbackSize);
         this.cursor = new Cursor(this, cursorRow, cursorCol, initialAttributes);
     }
 
