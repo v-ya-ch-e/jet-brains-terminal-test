@@ -35,7 +35,7 @@ public class TerminalBuffer {
     public TerminalBuffer(int width, int height, int maxScrollbackSize, int cursorRow, int cursorCol, CellAttributes initialAttributes) {
         this(width, height, maxScrollbackSize, cursorRow, cursorCol, initialAttributes, ' ', Character.MIN_VALUE);
     }
-    
+
     public TerminalBuffer(int width, int height, int maxScrollbackSize, CellAttributes initialAttributes) {
         this(width, height, maxScrollbackSize, 0, 0, initialAttributes);
     }
@@ -56,6 +56,10 @@ public class TerminalBuffer {
 
     public int getMaxScrollbackSize() {
         return this.maxScrollbackSize;
+    }
+
+    public int getScrollbackSize() {
+        return this.scrollback.size();
     }
 
     // Setting the cursor position
@@ -197,7 +201,7 @@ public class TerminalBuffer {
 
     public String getScrollbackContent() {
         StringBuilder content = new StringBuilder();
-        for(int i = scrollback.size()-1; i >= 0; i--) {
+        for(int i = 0; i < scrollback.size(); i++) {
             content.append(getScrollbackLineAsString(i));
             content.append("\n");
         }
@@ -214,13 +218,13 @@ public class TerminalBuffer {
     // Editing regarding the cursor position
 
     public void writeCharacter(char c, Cursor performer) {
+        screen[performer.getRow()][performer.getCol()] = new Cell(c, performer.getCurrentAttributes());
         if(performer.isAtEndOfScreen()) {
             insertLineAtBottom();
             if(performer != cursor) {
                 performer.moveUp(1);
             }
         }
-        screen[performer.getRow()][performer.getCol()] = new Cell(c, performer.getCurrentAttributes());
         performer.moveRightWrapped(1);
     }
 
