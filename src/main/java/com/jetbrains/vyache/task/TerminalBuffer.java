@@ -1,5 +1,112 @@
 package com.jetbrains.vyache.task;
 
+import java.util.ArrayDeque;
+
 public class TerminalBuffer {
-    // Initializing
+
+    private final int width;
+    private final int height;
+    private final int maxScrollbackSize;
+    private final Cell[][] screen;
+    private final ArrayDeque<Cell[]> scrollback;
+    private final Cursor cursor;
+
+    public TerminalBuffer(int width, int height, int maxScrollbackSize, int cursorRow, int cursorCol, CellAttributes initialAttributes) {
+        this.width = width;
+        this.height = height;
+        this.maxScrollbackSize = maxScrollbackSize;
+        this.screen = new Cell[height][width];
+        this.scrollback = new ArrayDeque<>();
+        this.cursor = new Cursor(this, cursorRow, cursorCol, initialAttributes);
+    }
+
+    public TerminalBuffer(int width, int height, int maxScrollbackSize, CellAttributes initialAttributes) {
+        this(width, height, maxScrollbackSize, 0, 0, initialAttributes);
+    }
+
+    public TerminalBuffer(int width, int height, int maxScrollbackSize) {
+        this(width, height, maxScrollbackSize, CellAttributes.DEFAULT);
+    }
+
+    // Getting the screen dimensions
+
+    public int getWidth() {
+        return this.width;
+    }
+
+    public int getHeight() {
+        return this.height;
+    }
+
+    public int getMaxScrollbackSize() {
+        return this.maxScrollbackSize;
+    }
+
+    // Setting the cursor position
+
+    public void setCursorPosition(int row, int col) {
+        this.cursor.setPosition(row, col);
+    }
+
+    public void setCursorRow(int row) {
+        this.cursor.setRow(row);
+    }
+
+    public void setCursorCol(int col) {
+        this.cursor.setCol(col);
+    }
+
+    // Moving the cursor
+
+    public void moveCursorUp(int n) {
+        this.cursor.moveUp(n);
+    }
+
+    public void moveCursorDown(int n) {
+        this.cursor.moveDown(n);
+    }
+
+    public void moveCursorLeft(int n) {
+        this.cursor.moveLeft(n);
+    }
+
+    public void moveCursorRight(int n) {
+        this.cursor.moveRight(n);
+    }
+
+    // Getting the cursor position
+
+    public int getCursorRow() {
+        return this.cursor.getRow();
+    }
+
+    public int getCursorCol() {
+        return this.cursor.getCol();
+    }
+
+    // Attribute management
+
+    public void setCurrentForeground(TerminalColor color) {
+        this.cursor.setCurrentForeground(color);
+    }
+
+    public void setCurrentBackground(TerminalColor color) {
+        this.cursor.setCurrentBackground(color);
+    }
+
+    public void setCurrentStyles(StyleFlag... flags) {
+        this.cursor.setCurrentStyles(flags);
+    }
+
+    public void setCurrentAttributes(CellAttributes attributes) {
+        this.cursor.setCurrentAttributes(attributes);
+    }
+
+    public void resetCurrentAttributes() {
+        this.cursor.resetCurrentAttributes();
+    }
+
+    public CellAttributes getCurrentAttributes() {
+        return this.cursor.getCurrentAttributes();
+    }
 }
