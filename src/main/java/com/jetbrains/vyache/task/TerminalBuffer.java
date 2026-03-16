@@ -18,7 +18,12 @@ public class TerminalBuffer {
         this.height = height;
         this.maxScrollbackSize = maxScrollbackSize;
         this.screen = new Cell[height][width];
-        this.scrollback = new ArrayDeque<>();
+        for (int i = 0; i < height; i++) {
+            for (int j = 0; j < width; j++) {
+                this.screen[i][j] = Cell.EMPTY;
+            }
+        }
+        this.scrollback = new ArrayDeque<>(maxScrollbackSize);
         this.cursor = new Cursor(this, cursorRow, cursorCol, initialAttributes);
     }
 
@@ -115,6 +120,7 @@ public class TerminalBuffer {
     // Content access
 
     public Cell getCellAt(int row, int col) {
+        if (row < 0 || row >= height || col < 0 || col >= width) return null;
         return screen[row][col];
     }
 
