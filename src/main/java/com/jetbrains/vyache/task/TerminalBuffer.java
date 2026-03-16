@@ -12,8 +12,13 @@ public class TerminalBuffer {
     private final Cell[][] screen;
     private final ScrollbackRingBuffer scrollback;
     private final Cursor cursor;
+    public final Character DEFAULT_EMPTY_CHAR;
+    public final Character DEFAULT_UNDEFINED_CHAR;
 
-    public TerminalBuffer(int width, int height, int maxScrollbackSize, int cursorRow, int cursorCol, CellAttributes initialAttributes) {
+    // Initialization
+
+    public TerminalBuffer(int width, int height, int maxScrollbackSize, int cursorRow, int cursorCol, CellAttributes initialAttributes,
+                                Character defaultEmptyChar, Character defaultUndefinedChar) {
         this.width = width;
         this.height = height;
         this.maxScrollbackSize = maxScrollbackSize;
@@ -23,8 +28,14 @@ public class TerminalBuffer {
         }
         this.scrollback = new ScrollbackRingBuffer(maxScrollbackSize);
         this.cursor = new Cursor(this, cursorRow, cursorCol, initialAttributes);
+        DEFAULT_EMPTY_CHAR = defaultEmptyChar;
+        DEFAULT_UNDEFINED_CHAR = defaultUndefinedChar;
     }
 
+    public TerminalBuffer(int width, int height, int maxScrollbackSize, int cursorRow, int cursorCol, CellAttributes initialAttributes) {
+        this(width, height, maxScrollbackSize, cursorRow, cursorCol, initialAttributes, ' ', Character.MIN_VALUE);
+    }
+    
     public TerminalBuffer(int width, int height, int maxScrollbackSize, CellAttributes initialAttributes) {
         this(width, height, maxScrollbackSize, 0, 0, initialAttributes);
     }
@@ -127,35 +138,80 @@ public class TerminalBuffer {
     }
 
     public Cell getCellAt(Cursor performer) {
-        return getCellAt(performer.getRow(), performer.getCol());
+        if(performer.isAttachedTo(this))
+            return getCellAt(performer.getRow(), performer.getCol());
+        else 
+            return null;
+    }
+
+    public CellAttributes getScreenAttributesAt(int row, int col) {
+        Cell cell = getCellAt(row, col);
+        if(cell == null) return null;
+        return cell.attributes();
+    }
+
+    public CellAttributes getScrollbackAttributesAt(int row, int col) {
+        Cell[] cellLine = scrollback.getElement(row);
+        if(cellLine == null || col < 0 || col >= cellLine.length) return null;
+        return cellLine[col].attributes();
+    }
+
+    public char getScreenCharAt(int row, int col) {
+        Cell cell = getCellAt(row, col);
+        if(cell == null) return DEFAULT_UNDEFINED_CHAR;
+        if(cell.isEmpty()) return DEFAULT_EMPTY_CHAR;
+        return cell.character();
+    }
+
+    public char getScrollbackCharAt(int row, int col) {
+        Cell[] cellLine = scrollback.getElement(row);
+        if(cellLine == null || col < 0 || col >= cellLine.length) return DEFAULT_UNDEFINED_CHAR;
+        if(cellLine[col].isEmpty()) return DEFAULT_EMPTY_CHAR;
+        return cellLine[col].character();
+    }
+
+    public String getScreenLineAsString(int row) {
+        StringBuilder line = new StringBuilder();
+        for(int i = 0; i < width; i++) {
+            line.append(getScreenCharAt(row, i));
+        }
+        return line.toString();
+    }
+
+    public String getScrollbackLineAsString(int row) {
+        StringBuilder line = new StringBuilder();
+        for(int i = 0; i < width; i++) {
+            line.append(getScrollbackCharAt(row, i));
+        }
+        return line.toString();
+    }
+
+    public String getScreenContent() {
+        StringBuilder content = new StringBuilder();
+        for(int i = 0; i < height; i++) {
+            content.append(getScreenLineAsString(i));
+            content.append("\n");
+        }
+        return content.toString();
+    }
+
+    public String getScrollbackContent() {
+        StringBuilder content = new StringBuilder();
+        for(int i = scrollback.size()-1; i >= 0; i--) {
+            content.append(getScrollbackLineAsString(i));
+            content.append("\n");
+        }
+        return content.toString();
+    }
+
+    public String getFullContent() {
+        StringBuilder content = new StringBuilder();
+        content.append(getScrollbackContent());
+        content.append(getScreenContent());
+        return content.toString();
     }
 
     // Editing regarding the cursor position
-
-    // private void shiftEverythingRight(int n) {
-    //     int originalCol = cursor.getCol();
-    //     int originalRow = cursor.getRow();
-        
-    //     Cursor shifter = new Cursor(this, originalRow, originalCol, cursor.getCurrentAttributes());
-    //     int counter = n;
-    //     List<Character> characters = new LinkedList<>();
-
-    //     while (counter > 0 && !shifter.isAtEndOfScreen()) {
-    //         if (getCellAt(shifter.getRow(), shifter.getCol()).isEmpty()) {
-    //             counter--;
-    //         }
-    //         else {
-    //             counter++;
-    //             characters.add(getCellAt(shifter.getRow(), shifter.getCol()).character());
-    //         }
-    //         shifter.moveRightWrapped(1);
-    //     }
-    //     cursor.moveRightWrapped(n);
-    //     for(char c : characters) {
-    //         writeCharacter(c);
-    //     }
-    //     cursor.setPosition(originalRow, originalCol);
-    // }
 
     public void writeCharacter(char c, Cursor performer) {
         if(performer.isAtEndOfScreen()) {

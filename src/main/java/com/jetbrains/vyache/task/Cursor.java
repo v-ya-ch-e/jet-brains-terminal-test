@@ -61,6 +61,10 @@ public class Cursor {
         return row == terminalBuffer.getHeight() - 1;
     }
 
+    public boolean isAttachedTo(TerminalBuffer terminalBuffer) {
+        return this.terminalBuffer == terminalBuffer;
+    }
+
     // Moving the cursor
 
     public void moveUp(int n) {
@@ -126,7 +130,7 @@ public class Cursor {
     // Distance calculation
 
     public int getDistanceTo(Cursor other) {
-        if(other == null || other.terminalBuffer != terminalBuffer) {
+        if(other == null || !other.isAttachedTo(terminalBuffer)) {
             return Integer.MAX_VALUE;
         }
         return (other.row - row)*terminalBuffer.getWidth() - col + other.col;
