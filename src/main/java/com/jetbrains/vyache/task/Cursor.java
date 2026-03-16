@@ -54,7 +54,11 @@ public class Cursor {
     }
 
     public boolean isAtEndOfScreen() {
-        return row == terminalBuffer.getHeight() - 1 && isAtEndOfLine();
+        return isAtLastLine() && isAtEndOfLine();
+    }
+
+    public boolean isAtLastLine() {
+        return row == terminalBuffer.getHeight() - 1;
     }
 
     // Moving the cursor
@@ -75,19 +79,22 @@ public class Cursor {
         col = Math.min(terminalBuffer.getWidth() - 1, col + n);
     }
 
+    public boolean canMoveLeftWrapped(int n) {
+        return row + Math.floorDiv((col - n), terminalBuffer.getWidth()) >= 0;
+    }
+
     public void moveLeftWrapped(int n) {
         row = Math.floorMod(row + Math.floorDiv((col - n), terminalBuffer.getWidth()), terminalBuffer.getHeight());
         col = Math.floorMod((col - n), terminalBuffer.getWidth());
     }
 
+    public boolean canMoveRightWrapped(int n) {
+        return (row + (col + n) / terminalBuffer.getWidth()) < terminalBuffer.getHeight();
+    }
+
     public void moveRightWrapped(int n) {
         row = (row + (col + n) / terminalBuffer.getWidth()) % terminalBuffer.getHeight();
         col = (col + n) % terminalBuffer.getWidth();
-    }
-
-    public void moveNextLineWrapped() {
-        row = (row + 1) % terminalBuffer.getHeight();
-        col = 0;
     }
 
     // Attribute management
@@ -115,6 +122,8 @@ public class Cursor {
     public void setCurrentStyles(StyleFlag... flags) {
         this.currentAttributes = this.currentAttributes.withStyles(flags);
     }
+
+    // Distance calculation
 
     public int getDistanceTo(Cursor other) {
         if(other == null || other.terminalBuffer != terminalBuffer) {
