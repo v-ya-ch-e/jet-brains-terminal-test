@@ -96,15 +96,15 @@ class TerminalBufferTest {
 
         @Test
         void defaultEmptyAndUndefinedChars() {
-            assertEquals(' ', buffer.DEFAULT_EMPTY_CHAR);
-            assertEquals(Character.MIN_VALUE, buffer.DEFAULT_UNDEFINED_CHAR);
+            assertEquals(' ', buffer.getDefaultEmptyChar());
+            assertEquals(Character.MIN_VALUE, buffer.getDefaultUndefinedChar());
         }
 
         @Test
         void customEmptyAndUndefinedChars() {
             TerminalBuffer b = new TerminalBuffer(WIDTH, HEIGHT, MAX_SCROLLBACK, 0, 0, CellAttributes.DEFAULT, '.', '?');
-            assertEquals('.', b.DEFAULT_EMPTY_CHAR);
-            assertEquals('?', b.DEFAULT_UNDEFINED_CHAR);
+            assertEquals('.', b.getDefaultEmptyChar());
+            assertEquals('?', b.getDefaultUndefinedChar());
         }
 
         @Test
@@ -749,6 +749,63 @@ class TerminalBufferTest {
             assertEquals('F', buffer.getScreenCharAt(1, 0));
             assertEquals('J', buffer.getScreenCharAt(1, 4));
         }
+
+        @Test
+        void insertTextDisplacedCharRetainsOriginalForeground() {
+            buffer.setCurrentForeground(TerminalColor.RED);
+            buffer.writeText("AB");
+            buffer.setCursorPosition(0, 0);
+            buffer.setCurrentForeground(TerminalColor.GREEN);
+            buffer.insertText("X");
+
+            assertEquals(TerminalColor.GREEN, buffer.getScreenAttributesAt(0, 0).foreground()); // inserted 'X'
+            assertEquals(TerminalColor.RED, buffer.getScreenAttributesAt(0, 1).foreground());   // displaced 'A'
+            assertEquals(TerminalColor.RED, buffer.getScreenAttributesAt(0, 2).foreground());   // displaced 'B'
+        }
+
+        @Test
+        void insertTextDisplacedCharRetainsOriginalBackground() {
+            buffer.setCurrentBackground(TerminalColor.BLUE);
+            buffer.writeText("AB");
+            buffer.setCursorPosition(0, 0);
+            buffer.setCurrentBackground(TerminalColor.YELLOW);
+            buffer.insertText("Z");
+
+            assertEquals(TerminalColor.YELLOW, buffer.getScreenAttributesAt(0, 0).background()); // 'Z'
+            assertEquals(TerminalColor.BLUE, buffer.getScreenAttributesAt(0, 1).background());   // displaced 'A'
+            assertEquals(TerminalColor.BLUE, buffer.getScreenAttributesAt(0, 2).background());   // displaced 'B'
+        }
+
+        @Test
+        void insertTextDisplacedCharRetainsOriginalStyles() {
+            buffer.setCurrentStyles(StyleFlag.BOLD);
+            buffer.writeText("AB");
+            buffer.setCursorPosition(0, 0);
+            buffer.setCurrentStyles(StyleFlag.ITALIC);
+            buffer.insertText("X");
+
+            assertTrue(buffer.getScreenAttributesAt(0, 0).hasStyle(StyleFlag.ITALIC));
+            assertFalse(buffer.getScreenAttributesAt(0, 0).hasStyle(StyleFlag.BOLD));
+            assertTrue(buffer.getScreenAttributesAt(0, 1).hasStyle(StyleFlag.BOLD));   // displaced 'A'
+            assertFalse(buffer.getScreenAttributesAt(0, 1).hasStyle(StyleFlag.ITALIC));
+        }
+
+        @Test
+        void insertTextWrappedDisplacedCharsRetainAttributes() {
+            buffer.setCurrentForeground(TerminalColor.RED);
+            buffer.writeText("ABCDEFGHIJ");
+            buffer.setCursorPosition(0, 0);
+            buffer.setCurrentForeground(TerminalColor.GREEN);
+            buffer.insertText("XY");
+
+            // Row 0: X(GREEN) Y(GREEN) A(RED) B(RED) ... H(RED)
+            // Row 1: I(RED) J(RED) ...
+            assertEquals(TerminalColor.GREEN, buffer.getScreenAttributesAt(0, 0).foreground()); // 'X'
+            assertEquals(TerminalColor.GREEN, buffer.getScreenAttributesAt(0, 1).foreground()); // 'Y'
+            assertEquals(TerminalColor.RED, buffer.getScreenAttributesAt(0, 2).foreground());   // displaced 'A'
+            assertEquals(TerminalColor.RED, buffer.getScreenAttributesAt(1, 0).foreground());   // displaced 'I' (wrapped)
+            assertEquals(TerminalColor.RED, buffer.getScreenAttributesAt(1, 1).foreground());   // displaced 'J' (wrapped)
+        }
     }
 
     // =====================================================================
@@ -783,6 +840,14 @@ class TerminalBufferTest {
             buffer.setCursorPosition(0, 3);
             buffer.fillLine('-');
             assertEquals(1, buffer.getCursorRow());
+        }
+
+        @Test
+        void fillLineResetsCursorColumnToZero() {
+            buffer.setCursorPosition(0, 5);
+            buffer.fillLine('-');
+            assertEquals(1, buffer.getCursorRow());
+            assertEquals(0, buffer.getCursorCol());
         }
 
         @Test
@@ -1175,6 +1240,33 @@ class TerminalBufferTest {
             assertEquals('Z', buffer.getScreenCharAt(0, WIDTH - 1));
             assertEquals('J', buffer.getScreenCharAt(1, 0));
         }
+
+        @Test
+        void zeroScrollbackCapacityDoesNotCrash() {
+            TerminalBuffer noScroll = new TerminalBuffer(WIDTH, HEIGHT, 0);
+            assertDoesNotThrow(() -> {
+                noScroll.writeText("ABCDEFGHIJ");
+                noScroll.insertLineAtBottom();
+                noScroll.writeText("KLMNOPQRST");
+                noScroll.insertLineAtBottom();
+            });
+        }
+
+        @Test
+        void zeroScrollbackCapacityKeepsOnlyMostRecentLine() {
+            // capacity=0 is silently clamped to 1, so only the last pushed line is retained
+            TerminalBuffer noScroll = new TerminalBuffer(WIDTH, HEIGHT, 0);
+            noScroll.setCursorPosition(0, 0);
+            noScroll.writeText("FIRSTLINE_");
+            noScroll.insertLineAtBottom();
+            noScroll.setCursorPosition(0, 0);
+            noScroll.writeText("SECONDLINE");
+            noScroll.insertLineAtBottom();
+
+            // Only SECONDLINE survives (capacity is 1)
+            assertFalse(noScroll.getScrollbackContent().contains("FIRSTLINE_"));
+            assertTrue(noScroll.getScrollbackContent().contains("SECONDLINE"));
+        }
     }
 
     // =====================================================================
@@ -1271,7 +1363,9 @@ class TerminalBufferTest {
             buffer.setCurrentForeground(TerminalColor.GREEN);
             buffer.insertText("X");
 
-            assertEquals(TerminalColor.GREEN, buffer.getScreenAttributesAt(0, 0).foreground());
+            assertEquals(TerminalColor.GREEN, buffer.getScreenAttributesAt(0, 0).foreground()); // inserted 'X'
+            assertEquals(TerminalColor.RED, buffer.getScreenAttributesAt(0, 1).foreground());   // displaced 'A' must keep RED
+            assertEquals(TerminalColor.RED, buffer.getScreenAttributesAt(0, 2).foreground());   // displaced 'B' must keep RED
         }
 
         @Test
@@ -1288,6 +1382,64 @@ class TerminalBufferTest {
             assertEquals('H', buffer.getScreenCharAt(0, 0));
             assertEquals('!', buffer.getScreenCharAt(0, 9));
             assertEquals('W', buffer.getScreenCharAt(1, 0));
+        }
+    }
+
+    // =====================================================================
+    //  Cursor.offsetTo
+    // =====================================================================
+
+    @Nested
+    class CursorOffsetTo {
+
+        @Test
+        void offsetToAheadCursorIsPositive() {
+            Cursor c1 = new Cursor(buffer, 0, 0);
+            Cursor c2 = new Cursor(buffer, 0, 3);
+            assertEquals(3, c1.offsetTo(c2));
+        }
+
+        @Test
+        void offsetToSamePositionIsZero() {
+            Cursor c = new Cursor(buffer, 2, 5);
+            assertEquals(0, c.offsetTo(c));
+        }
+
+        @Test
+        void offsetToBehindCursorIsNegative() {
+            Cursor c1 = new Cursor(buffer, 0, 5);
+            Cursor c2 = new Cursor(buffer, 0, 2);
+            assertEquals(-3, c1.offsetTo(c2));
+        }
+
+        @Test
+        void offsetToNextLineAccountsForWidth() {
+            Cursor c1 = new Cursor(buffer, 0, 5);
+            Cursor c2 = new Cursor(buffer, 1, 3);
+            // (1-0)*WIDTH - 5 + 3 = 10 - 5 + 3 = 8
+            assertEquals(8, c1.offsetTo(c2));
+        }
+
+        @Test
+        void offsetToPreviousLineIsNegative() {
+            Cursor c1 = new Cursor(buffer, 1, 3);
+            Cursor c2 = new Cursor(buffer, 0, 5);
+            // (0-1)*WIDTH - 3 + 5 = -10 - 3 + 5 = -8
+            assertEquals(-8, c1.offsetTo(c2));
+        }
+
+        @Test
+        void offsetToNullReturnsMaxInt() {
+            Cursor c = new Cursor(buffer, 0, 0);
+            assertEquals(Integer.MAX_VALUE, c.offsetTo(null));
+        }
+
+        @Test
+        void offsetToForeignBufferCursorReturnsMaxInt() {
+            TerminalBuffer other = new TerminalBuffer(WIDTH, HEIGHT, MAX_SCROLLBACK);
+            Cursor c1 = new Cursor(buffer, 0, 0);
+            Cursor c2 = new Cursor(other, 0, 5);
+            assertEquals(Integer.MAX_VALUE, c1.offsetTo(c2));
         }
     }
 }

@@ -12,8 +12,8 @@ public class TerminalBuffer {
     private final Cell[][] screen;
     private final ScrollbackRingBuffer scrollback;
     private final Cursor cursor;
-    public final Character DEFAULT_EMPTY_CHAR;
-    public final Character DEFAULT_UNDEFINED_CHAR;
+    private final char DEFAULT_EMPTY_CHAR;
+    private final char DEFAULT_UNDEFINED_CHAR;
 
     // Initialization
 
@@ -60,6 +60,14 @@ public class TerminalBuffer {
 
     public int getScrollbackSize() {
         return this.scrollback.size();
+    }
+
+    public char getDefaultEmptyChar() {
+        return this.DEFAULT_EMPTY_CHAR;
+    }
+
+    public char getDefaultUndefinedChar() {
+        return this.DEFAULT_UNDEFINED_CHAR;
     }
 
     // Setting the cursor position
@@ -209,16 +217,13 @@ public class TerminalBuffer {
     }
 
     public String getFullContent() {
-        StringBuilder content = new StringBuilder();
-        content.append(getScrollbackContent());
-        content.append(getScreenContent());
-        return content.toString();
+        return getScrollbackContent() + getScreenContent();
     }
 
     // Editing regarding the cursor position
 
-    public void writeCharacter(char c, Cursor performer) {
-        screen[performer.getRow()][performer.getCol()] = new Cell(c, performer.getCurrentAttributes());
+    private void writeCell(Cell cell, Cursor performer) {
+        screen[performer.getRow()][performer.getCol()] = cell;
         if(performer.isAtEndOfScreen()) {
             insertLineAtBottom();
             if(performer != cursor) {
@@ -226,6 +231,14 @@ public class TerminalBuffer {
             }
         }
         performer.moveRightWrapped(1);
+    }
+
+    private void writeCell(Cell cell) {
+        writeCell(cell, cursor);
+    }
+
+    void writeCharacter(char c, Cursor performer) {
+        writeCell(new Cell(c, performer.getCurrentAttributes()), performer);
     }
 
     public void writeCharacter(char c) {
@@ -245,29 +258,28 @@ public class TerminalBuffer {
     public void insertText(String text) {
         int insertLength = text.length();
 
-        Queue<Character> toInsert = new LinkedList<>();
-        
+        Queue<Cell> toInsert = new LinkedList<>();
         for(char c : text.toCharArray()) {
-            toInsert.offer(c);
+            toInsert.offer(new Cell(c, cursor.getCurrentAttributes()));
         }
 
         while (!toInsert.isEmpty() && insertLength > 0) {
-            Character c = toInsert.poll();
+            Cell c = toInsert.poll();
             insertLength--;
             if (!getCellAtCursor().isEmpty()) {
-                toInsert.offer(getCellAtCursor().character());
+                toInsert.offer(getCellAtCursor());
             }
-            writeCharacter(c, cursor);
+            writeCell(c, cursor);
         }
 
         // Pushing the rest of the characters
         Cursor shifter = new Cursor(this, cursor.getRow(), cursor.getCol(), cursor.getCurrentAttributes());
         while (!toInsert.isEmpty()) {
-            Character c = toInsert.poll();
+            Cell c = toInsert.poll();
             if (!getCellAt(shifter).isEmpty()) {
-                toInsert.offer(getCellAt(shifter).character());
+                toInsert.offer(getCellAt(shifter));
             }
-            writeCharacter(c, shifter);
+            writeCell(c, shifter);
         }
     }
 
@@ -279,6 +291,7 @@ public class TerminalBuffer {
             insertLineAtBottom();
         }
         cursor.moveDown(1);
+        cursor.setCol(0);
     }
 
     // Editing regarding the scrollback

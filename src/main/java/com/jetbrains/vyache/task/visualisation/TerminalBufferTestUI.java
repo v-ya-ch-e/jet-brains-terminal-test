@@ -375,19 +375,19 @@ public class TerminalBufferTestUI extends JFrame {
                 "clearAll() \u2014 clears both the screen and the scrollback buffer",
                 e -> act(() -> buffer.clearAll())), c); c.gridx++;
 
-        c.gridy = 3; c.gridx = 0;
-        addLF(p, c, "Performer Row:", pwRowField);
-        addLF(p, c, "Col:", pwColField);
-        addLF(p, c, "Char:", pwCharField);
-        p.add(btn("Write char at performer",
-                "writeCharacter(c, Cursor) \u2014 creates new Cursor(buffer, row, col, currentAttrs) and writes the character at that position",
-                e -> act(() -> {
-                    String s = pwCharField.getText();
-                    if (!s.isEmpty()) {
-                        com.jetbrains.vyache.task.Cursor perf = new Cursor(buffer, pi(pwRowField), pi(pwColField), buffer.getCurrentAttributes());
-                        buffer.writeCharacter(s.charAt(0), perf);
-                    }
-                })), c); c.gridx++;
+//        c.gridy = 3; c.gridx = 0;
+//        addLF(p, c, "Performer Row:", pwRowField);
+//        addLF(p, c, "Col:", pwColField);
+//        addLF(p, c, "Char:", pwCharField);
+//        p.add(btn("Write char at performer",
+//                "writeCharacter(c, Cursor) \u2014 creates new Cursor(buffer, row, col, currentAttrs) and writes the character at that position",
+//                e -> act(() -> {
+//                    String s = pwCharField.getText();
+//                    if (!s.isEmpty()) {
+//                        com.jetbrains.vyache.task.Cursor perf = new Cursor(buffer, pi(pwRowField), pi(pwColField), buffer.getCurrentAttributes());
+//                        buffer.writeCharacter(s.charAt(0), perf);
+//                    }
+//                })), c); c.gridx++;
 
         return p;
     }
@@ -436,7 +436,7 @@ public class TerminalBufferTestUI extends JFrame {
         }
         statusLabel.setText(String.format("W=%d  H=%d  MaxScrollback=%d  EmptyChar='%s'  UndefChar='%s'",
                 buffer.getWidth(), buffer.getHeight(), buffer.getMaxScrollbackSize(),
-                buffer.DEFAULT_EMPTY_CHAR, buffer.DEFAULT_UNDEFINED_CHAR));
+                buffer.getDefaultEmptyChar(), buffer.getDefaultUndefinedChar()));
         cursorLbl.setText(String.format("\u2590 Cursor: row=%d  col=%d", buffer.getCursorRow(), buffer.getCursorCol()));
         attrsLbl.setText("\u25cf Attrs: " + buffer.getCurrentAttributes());
         dimsLbl.setText(String.format("%dx%d  scrollback=%d lines", buffer.getWidth(), buffer.getHeight(), countScrollbackLines()));
@@ -608,8 +608,8 @@ public class TerminalBufferTestUI extends JFrame {
             if (bg != null) { g2.setColor(bg); g2.fillRect(x, y, cw, ch); }
 
             boolean isContent = character >= ' '
-                    && character != buffer.DEFAULT_EMPTY_CHAR
-                    && character != buffer.DEFAULT_UNDEFINED_CHAR;
+                    && character != buffer.getDefaultEmptyChar()
+                    && character != buffer.getDefaultUndefinedChar();
             if (isContent) {
                 g2.setColor(termFg(attrs.foreground()));
                 g2.setFont(styledFont(base, attrs));

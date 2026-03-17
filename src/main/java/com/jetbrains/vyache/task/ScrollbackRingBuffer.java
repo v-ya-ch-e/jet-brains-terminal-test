@@ -7,12 +7,12 @@ public class ScrollbackRingBuffer {
     private int size = 0;
     private final int capacity;
 
-    public ScrollbackRingBuffer(int capacity) {
-        this.capacity = capacity;
-        this.buffer = new Cell[capacity][];
+    ScrollbackRingBuffer(int capacity) {
+        this.capacity = Math.max(1, capacity);
+        this.buffer = new Cell[this.capacity][];
     }
 
-    public void clear() {
+    void clear() {
         for(int i = 0; i < capacity; i++) {
             buffer[i] = null;
         }
@@ -21,7 +21,7 @@ public class ScrollbackRingBuffer {
         size = 0;
     }
 
-    public void add(Cell[] element) {
+    void add(Cell[] element) {
         buffer[tail] = element;
         tail = (tail + 1) % capacity;
         
@@ -32,20 +32,12 @@ public class ScrollbackRingBuffer {
         }
     }
 
-    public Cell[] getElement(int index) {
+    Cell[] getElement(int index) {
         if (index < 0 || index >= size) return null;
         return buffer[(head + index) % capacity];
     }
 
-    public Cell[] pollElement() {
-        if (size == 0) return null;
-        Cell[] result = buffer[head];
-        head = (head + 1) % capacity;
-        size--;
-        return result;
-    }
-
-    public int size() {
+    int size() {
         return size;
     }
 }

@@ -129,10 +129,14 @@ public class Cursor {
 
     // Distance calculation
 
-    public int getDistanceTo(Cursor other) {
+    public int offsetTo(Cursor other) {
         if(other == null || !other.isAttachedTo(terminalBuffer)) {
             return Integer.MAX_VALUE;
         }
-        return (other.row - row)*terminalBuffer.getWidth() - col + other.col;
+        return (other.getRow() - row)*terminalBuffer.getWidth() - col + other.getCol();
+    }
+
+    public int offsetTo(int row, int col) {
+        return (row - this.row)*terminalBuffer.getWidth() - this.col + col;
     }
 }
