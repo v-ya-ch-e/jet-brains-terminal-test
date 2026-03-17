@@ -91,6 +91,11 @@ Two configurable sentinels handle the distinction between "empty cell" and "out-
 
 This allows callers to distinguish "no content" from "invalid access" without exceptions.
 
+All content-access methods (`getScreenCharAt`, `getScrollbackCharAt`, `getScreenLineAsString`,
+`getScrollbackLineAsString`, `getScreenContent`, `getScrollbackContent`, `getFullContent`) have
+overloads that accept custom `(customEmptyChar, customUndefinedChar)` parameters, allowing
+callers to override the defaults on a per-call basis without reconstructing the buffer.
+
 ---
 
 ## Functionality reference
@@ -131,6 +136,8 @@ This allows callers to distinguish "no content" from "invalid access" without ex
 | `insertLineAtBottom()` | Scrolls screen up by 1: top row → scrollback, blank row at bottom, cursor row −1. |
 | `clearScreen()` | Fills all screen cells with `Cell.EMPTY`. Scrollback untouched. Cursor position preserved. |
 | `clearAll()` | Clears screen and scrollback. |
+| `resize(width, height)` | Resizes screen dimensions, replaying all content into the new grid (see [Resize](#9-resize-via-content-replay) for details). |
+| `resize(width, height, maxScrollbackSize)` | Resizes screen dimensions and scrollback limit. |
 
 ### Content access
 
@@ -147,6 +154,8 @@ This allows callers to distinguish "no content" from "invalid access" without ex
 | `getFullContent()` | Scrollback + screen combined |
 | `getScreenAttributesAt(row, col)` | `CellAttributes` at a screen position |
 | `getScrollbackAttributesAt(row, col)` | `CellAttributes` at a scrollback position |
+
+All content-access methods above also have overloads accepting `(customEmptyChar, customUndefinedChar)`.
 
 ---
 
@@ -215,11 +224,31 @@ This allows callers to distinguish "no content" from "invalid access" without ex
 
 The entire implementation uses only the Java standard library. JUnit 5 is the sole external dependency (test scope). This was a hard constraint of the task.
 
+### 9. Resize via content replay
+
+**Decision:** `resize(width, height, maxScrollbackSize)` creates a fresh temporary `TerminalBuffer` of the target dimensions, replays all existing content (scrollback then screen, line by line) into it, and then transplants the temporary buffer's internal state (screen grid, scrollback, cursor position) back into `this`.
+
+**Rationale:** This approach reuses all existing write/scroll logic rather than implementing separate reflow code. By writing non-empty cells from each source row into the new grid starting at the bottom row and scrolling after each line, the replay naturally handles:
+- **Narrowing:** long lines wrap onto multiple rows in the new grid.
+- **Widening:** short lines simply have more trailing empty space.
+- **Scrollback limit change:** the new ring buffer enforces the new limit during replay.
+
+**Trade-offs:**
+- **Wrapped lines are not re-joined:** when widening, a line that was previously soft-wrapped across two rows remains two separate rows instead of being merged back into one. This is because the buffer does not track soft-wrap vs. hard-wrap boundaries.
+- **Cursor position is not accurate kept:** the cursor tries to end in the same position as before, but it may differ from its pre-resize position. 
+- **O(scrollback + screen) cost:** replay touches every stored cell. For typical terminal sizes this is negligible, but for extremely large scrollback buffers it can be noticeable.
+
+### 10. Custom-char overloads for content access
+
+**Decision:** Every content-reading method (`getScreenCharAt`, `getScrollbackCharAt`, `getScreenLineAsString`, etc.) has a two-parameter overload accepting `(customEmptyChar, customUndefinedChar)`. The no-arg versions delegate to these using the buffer's defaults.
+
+**Rationale:** This enables callers (e.g. the Test UI, debug tools, or future renderers) to use different sentinel characters per-call without needing to reconstruct the buffer. The refactoring also reduces code duplication: each original method body was replaced by a single delegation call.
+
 ---
 
 ## Test coverage
 
-The test suite (`TerminalBufferTest`) contains **77 tests** organized into nested classes:
+The test suite (`TerminalBufferTest`) contains **140 tests** organized into nested classes:
 
 | Group | Tests | Coverage focus |
 |-------|-------|----------------|
@@ -267,8 +296,8 @@ The terminal grid is rendered in a custom `JPanel` with:
 ## Possible improvements
 
 1. **Wide character support** — CJK ideographs and emoji occupy 2 cells in real terminals. This would require a `cellWidth` field on `Cell` and adjustments to cursor advancement and rendering.
-2. **Screen resize** — changing width/height at runtime. Strategy options include reflowing content, truncating, or padding.
-3. **Scroll regions** — ANSI terminals support scroll margins (DECSTBM), allowing only a sub-region of the screen to scroll.
-4. **Line wrapping metadata** — tracking which lines are soft-wrapped (continuation of a long line) vs. hard-wrapped (explicit newline) to enable smarter reflow on resize.
+2. **Line wrapping metadata** — tracking which lines are soft-wrapped (continuation of a long line) vs. hard-wrapped (explicit newline). This would allow resize to re-join soft-wrapped lines when widening and to preserve blank lines that were explicitly produced by the shell.
+3. **Cursor position preservation on resize** — remembering the cursor's logical position (e.g. distance from the bottom of content) and restoring it after replay, rather than leaving it wherever the replay ends.
+4. **Scroll regions** — ANSI terminals support scroll margins (DECSTBM), allowing only a sub-region of the screen to scroll.
 5. **Copy-on-write rows** — for large screens with mostly empty rows, sharing a single `EMPTY_ROW` instance and only allocating a dedicated array on first write.
 6. **StringBuilder pool** — the `getScreenContent()` / `getFullContent()` methods allocate a new `StringBuilder` on every call; a reusable buffer could reduce GC pressure in high-refresh scenarios.

@@ -46,10 +46,17 @@ import java.util.Queue;
  * <h3>Default characters</h3>
  * <ul>
  *   <li>{@code DEFAULT_EMPTY_CHAR} (default: {@code ' '}) — returned by
- *       {@code getScreenCharAt} / {@code getScrollbackCharAt} for empty cells.</li>
+ *       {@code getScreenCharAt} / {@code getScrollbackCharAt} for empty cells.
+ *       All content-access methods also have overloads that accept custom sentinels.</li>
  *   <li>{@code DEFAULT_UNDEFINED_CHAR} (default: {@code \u0000}) — returned for
  *       out-of-bounds accesses.</li>
  * </ul>
+ *
+ * <h3>Resize</h3>
+ * <p>The buffer can be resized at runtime via {@link #resize(int, int, int)}.
+ * Content is replayed into a fresh grid of the target dimensions. Long lines
+ * reflow (wrap) into the narrower width. See the
+ * method's documentation for the full trade-off description.
  *
  * @see Cursor
  * @see Cell
@@ -302,6 +309,16 @@ public class TerminalBuffer {
 
     // ─── Content access — screen ───────────────────────────────────
 
+    /**
+     * Returns a direct reference to the internal screen grid.
+     *
+     * <p><strong>Warning:</strong> the returned array is <em>not</em> a defensive copy.
+     * Modifications to it will silently bypass all buffer invariants.  This accessor
+     * exists to support {@link #resize(int, int, int)}, which transplants the grid
+     * from a temporary buffer.  Prefer the cell/line/content getters for read access.
+     *
+     * @return the mutable {@code Cell[height][width]} screen array
+     */
     public Cell[][] getScreen() {
         return this.screen;
     }
@@ -370,6 +387,15 @@ public class TerminalBuffer {
         return cellLine[col].attributes();
     }
 
+    /**
+     * Returns the character at a screen position using caller-specified sentinel characters.
+     *
+     * @param row               screen row
+     * @param col               screen column
+     * @param customEmptyChar   character to return for empty cells
+     * @param customUndefinedChar character to return for out-of-bounds coordinates
+     * @return the character, {@code customEmptyChar}, or {@code customUndefinedChar}
+     */
     public char getScreenCharAt(int row, int col, char customEmptyChar, char customUndefinedChar) {
         Cell cell = getCellAt(row, col);
         if(cell == null) return customUndefinedChar;
@@ -389,6 +415,15 @@ public class TerminalBuffer {
         return getScreenCharAt(row, col, DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
     }
 
+    /**
+     * Returns the character at a scrollback position using caller-specified sentinel characters.
+     *
+     * @param row               scrollback row (0 = oldest)
+     * @param col               column
+     * @param customEmptyChar   character to return for empty cells
+     * @param customUndefinedChar character to return for out-of-bounds coordinates
+     * @return the character, {@code customEmptyChar}, or {@code customUndefinedChar}
+     */
     public char getScrollbackCharAt(int row, int col, char customEmptyChar, char customUndefinedChar) {
         Cell[] cellLine = scrollback.getElement(row);
         if(cellLine == null || col < 0 || col >= cellLine.length) return customUndefinedChar;
@@ -408,6 +443,14 @@ public class TerminalBuffer {
         return getScrollbackCharAt(row, col, DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
     }
 
+    /**
+     * Returns a screen row as a fixed-width string using custom sentinel characters.
+     *
+     * @param row               screen row index
+     * @param customEmptyChar   character for empty cells
+     * @param customUndefinedChar character for out-of-bounds columns
+     * @return the row as a string of exactly {@link #getWidth()} characters
+     */
     public String getScreenLineAsString(int row, char customEmptyChar, char customUndefinedChar) {
         StringBuilder line = new StringBuilder();
         for(int i = 0; i < width; i++) {
@@ -426,6 +469,14 @@ public class TerminalBuffer {
         return getScreenLineAsString(row, DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
     }
 
+    /**
+     * Returns a scrollback row as a fixed-width string using custom sentinel characters.
+     *
+     * @param row               scrollback row index (0 = oldest)
+     * @param customEmptyChar   character for empty cells
+     * @param customUndefinedChar character for out-of-bounds columns
+     * @return the row as a string of exactly {@link #getWidth()} characters
+     */
     public String getScrollbackLineAsString(int row, char customEmptyChar, char customUndefinedChar) {
         StringBuilder line = new StringBuilder();
         for(int i = 0; i < width; i++) {
@@ -444,6 +495,13 @@ public class TerminalBuffer {
         return getScrollbackLineAsString(row, DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
     }
 
+    /**
+     * Returns the entire screen content using custom sentinel characters.
+     *
+     * @param customEmptyChar   character for empty cells
+     * @param customUndefinedChar character for out-of-bounds cells
+     * @return multi-line screen content string
+     */
     public String getScreenContent(char customEmptyChar, char customUndefinedChar) {
         StringBuilder content = new StringBuilder();
         for(int i = 0; i < height; i++) {
@@ -465,6 +523,13 @@ public class TerminalBuffer {
         return getScreenContent(DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
     }
 
+    /**
+     * Returns the entire scrollback content using custom sentinel characters.
+     *
+     * @param customEmptyChar   character for empty cells
+     * @param customUndefinedChar character for out-of-bounds cells
+     * @return multi-line scrollback content string (oldest first), or empty if scrollback is empty
+     */
     public String getScrollbackContent(char customEmptyChar, char customUndefinedChar) {
         StringBuilder content = new StringBuilder();
         for(int i = 0; i < scrollback.size(); i++) {
@@ -486,6 +551,13 @@ public class TerminalBuffer {
         return getScrollbackContent(DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
     }
 
+    /**
+     * Returns scrollback + screen content combined, using custom sentinel characters.
+     *
+     * @param customEmptyChar   character for empty cells
+     * @param customUndefinedChar character for out-of-bounds cells
+     * @return the full terminal content as a string
+     */
     public String getFullContent(char customEmptyChar, char customUndefinedChar) {
         return getScrollbackContent(customEmptyChar, customUndefinedChar) + getScreenContent(customEmptyChar, customUndefinedChar);
     }
@@ -682,6 +754,11 @@ public class TerminalBuffer {
         scrollback.clear();
     }
 
+    /**
+     * Writes an array of cells at the current cursor position, skipping any
+     * {@link Cell#isEmpty() empty} cells. Used by {@link #resize} to replay
+     * a source row without re-introducing empty padding.
+     */
     private void writeTextWithoutEmpty(Cell[] text) {
         for (Cell c : text) {
             if(c.isEmpty()) continue;
@@ -689,6 +766,32 @@ public class TerminalBuffer {
         }
     }
 
+    /**
+     * Resizes the terminal to new dimensions and a new scrollback limit.
+     *
+     * <h4>Algorithm</h4>
+     * <p>A fresh temporary {@code TerminalBuffer} of the target size is created. All
+     * existing content — scrollback lines first, then screen rows — is replayed into
+     * it in order using {@link #writeTextWithoutEmpty(Cell[])}. Each source row is
+     * written starting at the bottom of the new screen; after writing, the row is
+     * scrolled up to make room for the next one. Once all content has been replayed,
+     * the temporary buffer's internal state (screen grid, scrollback, cursor position)
+     * is transplanted into {@code this}.
+     *
+     * <h4>Content-handling trade-offs</h4>
+     * <ul>
+     *   <li><strong>Line reflow:</strong> if the new width is narrower than the old
+     *       width, long lines automatically wrap onto multiple rows during replay.
+     *       If the new width is wider, previously wrapped lines will not be
+     *       re-joined — each source row remains a separate unit.</li>
+     *   <li><strong>Cursor position:</strong> the cursor tries to stay in the same position,
+     *       but it may differ from its pre-resize position if the new width is narrower than the old width.</li>
+     * </ul>
+     *
+     * @param width             new number of columns (must be &gt; 0)
+     * @param height            new number of rows (must be &gt; 0)
+     * @param maxScrollbackSize new maximum scrollback lines (0 is clamped to 1 internally)
+     */
     public void resize(int width, int height, int maxScrollbackSize) {
         TerminalBuffer newTerminal = new TerminalBuffer(width, height, maxScrollbackSize, 0, 0, cursor.getCurrentAttributes(), DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
         
@@ -712,10 +815,17 @@ public class TerminalBuffer {
         this.height = height;
         this.maxScrollbackSize = maxScrollbackSize;
         this.screen = newTerminal.getScreen();
-        this.cursor.setPosition(newTerminal.cursor.getRow(), newTerminal.cursor.getCol());
+        this.cursor.setPosition(cursor.getRow(), cursor.getCol());
         this.scrollback = newTerminal.scrollback;
     }
 
+    /**
+     * Resizes the terminal to new dimensions, keeping the current scrollback limit.
+     *
+     * @param width  new number of columns
+     * @param height new number of rows
+     * @see #resize(int, int, int)
+     */
     public void resize(int width, int height) {
         resize(width, height, maxScrollbackSize);
     }
