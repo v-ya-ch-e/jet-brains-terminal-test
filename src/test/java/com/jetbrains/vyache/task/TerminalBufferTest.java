@@ -854,7 +854,14 @@ class TerminalBufferTest {
         void fillLineAtLastLineScrolls() {
             buffer.setCursorPosition(HEIGHT - 1, 0);
             buffer.fillLine('Z');
-            assertFalse(buffer.getScrollbackContent().isEmpty());
+            assertEquals('Z', buffer.getScreenCharAt(HEIGHT - 2, 0));
+        }
+
+        @Test
+        void fillLineAtLastLineDoesNotScrollEmptyLine() {
+            buffer.setCursorPosition(HEIGHT - 1, 0);
+            buffer.fillLine('Z');
+            assertTrue(buffer.getScrollbackContent().isEmpty());
         }
 
         @Test
