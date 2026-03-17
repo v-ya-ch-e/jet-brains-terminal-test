@@ -1442,4 +1442,487 @@ class TerminalBufferTest {
             assertEquals(Integer.MAX_VALUE, c1.offsetTo(c2));
         }
     }
+
+    // =====================================================================
+    //  Custom Empty/Undefined Char Overloads
+    // =====================================================================
+
+    @Nested
+    class CustomCharOverloads {
+
+        @Test
+        void getScreenCharAtWithCustomChars() {
+            buffer.writeCharacter('A');
+            assertEquals('A', buffer.getScreenCharAt(0, 0, '.', '?'));
+            assertEquals('.', buffer.getScreenCharAt(0, 1, '.', '?'));
+            assertEquals('?', buffer.getScreenCharAt(-1, 0, '.', '?'));
+            assertEquals('?', buffer.getScreenCharAt(0, WIDTH, '.', '?'));
+        }
+
+        @Test
+        void getScrollbackCharAtWithCustomChars() {
+            buffer.writeText("ABCDEFGHIJ");
+            buffer.insertLineAtBottom();
+            assertEquals('A', buffer.getScrollbackCharAt(0, 0, '.', '?'));
+            assertEquals('?', buffer.getScrollbackCharAt(5, 0, '.', '?'));
+            assertEquals('?', buffer.getScrollbackCharAt(0, WIDTH, '.', '?'));
+        }
+
+        @Test
+        void getScreenLineAsStringWithCustomChars() {
+            buffer.writeText("Hi");
+            String line = buffer.getScreenLineAsString(0, '.', '?');
+            assertEquals("Hi" + ".".repeat(WIDTH - 2), line);
+        }
+
+        @Test
+        void getScrollbackLineAsStringWithCustomChars() {
+            buffer.writeText("AB");
+            buffer.insertLineAtBottom();
+            String line = buffer.getScrollbackLineAsString(0, '.', '?');
+            assertEquals("AB" + ".".repeat(WIDTH - 2), line);
+        }
+
+        @Test
+        void getScreenContentWithCustomChars() {
+            buffer.writeText("Hi");
+            String content = buffer.getScreenContent('.', '?');
+            String firstLine = "Hi" + ".".repeat(WIDTH - 2) + "\n";
+            String emptyLine = ".".repeat(WIDTH) + "\n";
+            assertEquals(firstLine + emptyLine.repeat(HEIGHT - 1), content);
+        }
+
+        @Test
+        void getScrollbackContentWithCustomChars() {
+            buffer.writeText("ABCDEFGHIJ");
+            buffer.insertLineAtBottom();
+            String content = buffer.getScrollbackContent('.', '?');
+            assertEquals("ABCDEFGHIJ\n", content);
+        }
+
+        @Test
+        void getFullContentWithCustomChars() {
+            buffer.writeText("ScrollLine");
+            buffer.insertLineAtBottom();
+            buffer.setCursorPosition(0, 0);
+            buffer.writeText("ScreenLine");
+            String full = buffer.getFullContent('.', '?');
+            assertTrue(full.contains("ScrollLine"));
+            assertTrue(full.contains("ScreenLine"));
+        }
+
+        @Test
+        void defaultOverloadsMatchExplicitDefaults() {
+            buffer.writeText("Hello");
+            assertEquals(
+                    buffer.getScreenContent(),
+                    buffer.getScreenContent(' ', Character.MIN_VALUE));
+            assertEquals(
+                    buffer.getScreenLineAsString(0),
+                    buffer.getScreenLineAsString(0, ' ', Character.MIN_VALUE));
+            assertEquals(
+                    buffer.getScreenCharAt(0, 0),
+                    buffer.getScreenCharAt(0, 0, ' ', Character.MIN_VALUE));
+        }
+    }
+
+    // =====================================================================
+    //  Resize — Dimensions
+    // =====================================================================
+
+    @Nested
+    class ResizeDimensions {
+
+        @Test
+        void resizeUpdatesWidthAndHeight() {
+            buffer.resize(20, 10);
+            assertEquals(20, buffer.getWidth());
+            assertEquals(10, buffer.getHeight());
+        }
+
+        @Test
+        void resizeUpdatesScrollbackLimit() {
+            buffer.resize(20, 10, 500);
+            assertEquals(20, buffer.getWidth());
+            assertEquals(10, buffer.getHeight());
+            assertEquals(500, buffer.getMaxScrollbackSize());
+        }
+
+        @Test
+        void resizeWithoutScrollbackKeepsOldLimit() {
+            buffer.resize(20, 10);
+            assertEquals(MAX_SCROLLBACK, buffer.getMaxScrollbackSize());
+        }
+
+        @Test
+        void resizeToSameDimensionsPreservesContent() {
+            buffer.writeText("Hello");
+            buffer.resize(WIDTH, HEIGHT);
+            assertEquals(WIDTH, buffer.getWidth());
+            assertEquals(HEIGHT, buffer.getHeight());
+            assertTrue(buffer.getFullContent().contains("Hello"));
+        }
+
+        @Test
+        void resizeScreenGridHasCorrectSize() {
+            buffer.resize(15, 8);
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 15; c++) {
+                    assertNotNull(buffer.getCellAt(r, c));
+                }
+            }
+            assertNull(buffer.getCellAt(8, 0));
+            assertNull(buffer.getCellAt(0, 15));
+        }
+    }
+
+    // =====================================================================
+    //  Resize — Content Preservation
+    // =====================================================================
+
+    @Nested
+    class ResizeContentPreservation {
+
+        @Test
+        void resizeWiderPreservesContent() {
+            buffer.writeText("Hello");
+            buffer.resize(20, HEIGHT);
+            String full = buffer.getFullContent();
+            assertTrue(full.contains("Hello"));
+        }
+
+        @Test
+        void resizeTallerPreservesContent() {
+            buffer.writeText("Hello");
+            buffer.resize(WIDTH, 10);
+            String full = buffer.getFullContent();
+            assertTrue(full.contains("Hello"));
+        }
+
+        @Test
+        void resizeNarrowerReflowsLongLine() {
+            // WIDTH=10, write a full line "ABCDEFGHIJ"
+            buffer.writeText("ABCDEFGHIJ");
+            // Resize to width 5 — the 10-char line should reflow into two 5-char rows
+            buffer.resize(5, HEIGHT);
+            String full = buffer.getFullContent();
+            assertTrue(full.contains("ABCDE"));
+            assertTrue(full.contains("FGHIJ"));
+        }
+
+        @Test
+        void resizeNarrowerPreservesCharacterOrder() {
+            buffer.writeText("ABCDEFGHIJ");
+            buffer.resize(5, 10);
+            String full = buffer.getFullContent();
+            int posA = full.indexOf('A');
+            int posF = full.indexOf('F');
+            assertTrue(posA < posF);
+        }
+
+        @Test
+        void resizePreservesScrollbackContent() {
+            buffer.writeText("ScrollLine");
+            buffer.insertLineAtBottom();
+            buffer.setCursorPosition(0, 0);
+            buffer.writeText("ScreenLine");
+            buffer.resize(WIDTH, HEIGHT);
+            String full = buffer.getFullContent();
+            assertTrue(full.contains("ScrollLine"));
+            assertTrue(full.contains("ScreenLine"));
+        }
+
+        @Test
+        void resizePreservesContentOrderScrollbackThenScreen() {
+            buffer.writeText("FIRST_LINE");
+            buffer.insertLineAtBottom();
+            buffer.setCursorPosition(0, 0);
+            buffer.writeText("SECONDLINE");
+            buffer.resize(WIDTH, HEIGHT);
+            String full = buffer.getFullContent();
+            int firstPos = full.indexOf("FIRST_LINE");
+            int secondPos = full.indexOf("SECONDLINE");
+            assertTrue(firstPos >= 0, "FIRST_LINE should be in full content");
+            assertTrue(secondPos >= 0, "SECONDLINE should be in full content");
+            assertTrue(firstPos < secondPos, "Scrollback content should appear before screen content");
+        }
+
+        @Test
+        void resizeMultipleScreenLinesPreserved() {
+            buffer.setCursorPosition(0, 0);
+            buffer.writeText("Line_0____");
+            buffer.setCursorPosition(1, 0);
+            buffer.writeText("Line_1____");
+            buffer.setCursorPosition(2, 0);
+            buffer.writeText("Line_2____");
+            buffer.resize(WIDTH, HEIGHT);
+            String full = buffer.getFullContent();
+            assertTrue(full.contains("Line_0____"));
+            assertTrue(full.contains("Line_1____"));
+            assertTrue(full.contains("Line_2____"));
+        }
+
+        @Test
+        void resizeEmptyBufferProducesEmptyScreen() {
+            buffer.resize(15, 8);
+            for (int r = 0; r < 8; r++) {
+                for (int c = 0; c < 15; c++) {
+                    assertTrue(buffer.getCellAt(r, c).isEmpty());
+                }
+            }
+        }
+
+        @Test
+        void resizePreservesAttributes() {
+            buffer.setCurrentForeground(TerminalColor.RED);
+            buffer.setCurrentStyles(StyleFlag.BOLD);
+            buffer.writeText("Styled");
+            buffer.resize(20, HEIGHT);
+            String full = buffer.getFullContent();
+            assertTrue(full.contains("Styled"));
+            // Find "Styled" in the new grid and check attributes
+            for (int r = 0; r < buffer.getHeight(); r++) {
+                Cell cell = buffer.getCellAt(r, 0);
+                if (cell != null && cell.character() == 'S') {
+                    assertEquals(TerminalColor.RED, cell.attributes().foreground());
+                    assertTrue(cell.attributes().hasStyle(StyleFlag.BOLD));
+                    return;
+                }
+            }
+            // Also check scrollback
+            for (int r = 0; r < buffer.getScrollbackSize(); r++) {
+                CellAttributes attrs = buffer.getScrollbackAttributesAt(r, 0);
+                if (attrs != null && buffer.getScrollbackCharAt(r, 0) == 'S') {
+                    assertEquals(TerminalColor.RED, attrs.foreground());
+                    assertTrue(attrs.hasStyle(StyleFlag.BOLD));
+                    return;
+                }
+            }
+            fail("'S' with RED foreground and BOLD not found after resize");
+        }
+    }
+
+    // =====================================================================
+    //  Resize — Blank Lines
+    // =====================================================================
+
+    @Nested
+    class ResizeBlankLines {
+
+        @Test
+        void resizePreservesBlankLineBetweenContent() {
+            buffer.setCursorPosition(0, 0);
+            buffer.writeText("Hello");
+            // row 1 left empty
+            buffer.setCursorPosition(2, 0);
+            buffer.writeText("World");
+
+            buffer.resize(WIDTH, HEIGHT);
+            String full = buffer.getFullContent();
+            int helloPos = full.indexOf("Hello");
+            int worldPos = full.indexOf("World");
+            assertTrue(helloPos >= 0);
+            assertTrue(worldPos >= 0);
+            assertTrue(worldPos > helloPos);
+        }
+
+        @Test
+        void resizeTrailingEmptyLinesPreserved() {
+            buffer.setCursorPosition(0, 0);
+            buffer.writeText("Top");
+            // rows 1-4 are empty
+            buffer.resize(WIDTH, HEIGHT);
+            assertEquals(HEIGHT, buffer.getHeight());
+            assertTrue(buffer.getFullContent().contains("Top"));
+        }
+    }
+
+    // =====================================================================
+    //  Resize — Cursor Position
+    // =====================================================================
+
+    @Nested
+    class ResizeCursorPosition {
+
+        @Test
+        void resizeCursorClampedToNewBounds() {
+            buffer.setCursorPosition(4, 9); // last row, last col
+            buffer.resize(5, 3);
+            assertTrue(buffer.getCursorRow() < 3);
+            assertTrue(buffer.getCursorCol() < 5);
+        }
+
+        @Test
+        void resizeCursorPreservedWhenWithinNewBounds() {
+            buffer.setCursorPosition(2, 5);
+            buffer.resize(20, 10);
+            assertEquals(2, buffer.getCursorRow());
+            assertEquals(5, buffer.getCursorCol());
+        }
+
+        @Test
+        void resizeCursorRowClampedWhenHeightShrinks() {
+            buffer.setCursorPosition(4, 0); // row 4 (last row for HEIGHT=5)
+            buffer.resize(WIDTH, 3);
+            assertTrue(buffer.getCursorRow() <= 2);
+        }
+
+        @Test
+        void resizeCursorColClampedWhenWidthShrinks() {
+            buffer.setCursorPosition(0, 9); // col 9 (last col for WIDTH=10)
+            buffer.resize(5, HEIGHT);
+            assertTrue(buffer.getCursorCol() <= 4);
+        }
+    }
+
+    // =====================================================================
+    //  Resize — Scrollback Limit
+    // =====================================================================
+
+    @Nested
+    class ResizeScrollbackLimit {
+
+        @Test
+        void resizeReducesScrollbackLimit() {
+            // Push many lines into scrollback
+            for (int i = 0; i < 10; i++) {
+                buffer.setCursorPosition(0, 0);
+                buffer.writeText(String.format("SB_LINE_%d_", i).substring(0, WIDTH));
+                buffer.insertLineAtBottom();
+            }
+            assertTrue(buffer.getScrollbackSize() > 3);
+
+            buffer.resize(WIDTH, HEIGHT, 3);
+            assertEquals(3, buffer.getMaxScrollbackSize());
+            // After replay into a buffer with maxScrollback=3, at most 3 lines kept
+            assertTrue(buffer.getScrollbackSize() <= 3);
+        }
+
+        @Test
+        void resizeIncreasesScrollbackLimit() {
+            buffer.resize(WIDTH, HEIGHT, 5000);
+            assertEquals(5000, buffer.getMaxScrollbackSize());
+        }
+    }
+
+    // =====================================================================
+    //  Resize — Edge Cases
+    // =====================================================================
+
+    @Nested
+    class ResizeEdgeCases {
+
+        @Test
+        void resizeTo1x1() {
+            buffer.writeText("ABCDEFGHIJ");
+            assertDoesNotThrow(() -> buffer.resize(1, 1));
+            assertEquals(1, buffer.getWidth());
+            assertEquals(1, buffer.getHeight());
+        }
+
+        @Test
+        void resizeFrom1x1() {
+            TerminalBuffer tiny = new TerminalBuffer(1, 1, 100);
+            tiny.writeCharacter('X');
+            tiny.resize(10, 5);
+            assertEquals(10, tiny.getWidth());
+            assertEquals(5, tiny.getHeight());
+            assertTrue(tiny.getFullContent().contains("X"));
+        }
+
+        @Test
+        void resizeDoesNotCrashOnEmptyBuffer() {
+            assertDoesNotThrow(() -> buffer.resize(20, 10));
+        }
+
+        @Test
+        void resizeVeryWide() {
+            buffer.writeText("Short");
+            buffer.resize(200, HEIGHT);
+            assertTrue(buffer.getFullContent().contains("Short"));
+            assertEquals(200, buffer.getWidth());
+        }
+
+        @Test
+        void resizeVeryTall() {
+            buffer.writeText("Line");
+            buffer.resize(WIDTH, 100);
+            assertTrue(buffer.getFullContent().contains("Line"));
+            assertEquals(100, buffer.getHeight());
+        }
+
+        @Test
+        void resizeShorterThanContentPushesToScrollback() {
+            for (int i = 0; i < HEIGHT; i++) {
+                buffer.setCursorPosition(i, 0);
+                buffer.writeText(String.format("ROW_%d_____", i).substring(0, WIDTH));
+            }
+            buffer.resize(WIDTH, 2);
+            assertEquals(2, buffer.getHeight());
+            assertFalse(buffer.getScrollbackContent().isEmpty());
+            String full = buffer.getFullContent();
+            assertTrue(full.contains("ROW_0"));
+        }
+
+        @Test
+        void resizePreservesCurrentAttributes() {
+            CellAttributes custom = new CellAttributes(
+                    TerminalColor.CYAN, TerminalColor.MAGENTA, Set.of(StyleFlag.UNDERLINE));
+            buffer.setCurrentAttributes(custom);
+            buffer.resize(20, 10);
+            assertEquals(custom, buffer.getCurrentAttributes());
+        }
+
+        @Test
+        void resizePreservesDefaultChars() {
+            TerminalBuffer b = new TerminalBuffer(WIDTH, HEIGHT, MAX_SCROLLBACK, 0, 0,
+                    CellAttributes.DEFAULT, '.', '?');
+            b.writeText("Hi");
+            b.resize(20, 10);
+            assertEquals('.', b.getDefaultEmptyChar());
+            assertEquals('?', b.getDefaultUndefinedChar());
+        }
+
+        @Test
+        void doubleResizePreservesContent() {
+            buffer.writeText("Persist");
+            buffer.resize(20, 10);
+            buffer.resize(5, 3);
+            assertTrue(buffer.getFullContent().contains("Persi"));
+        }
+
+        @Test
+        void resizeNarrowerThenWiderPreservesReflowedContent() {
+            buffer.writeText("ABCDEFGHIJ");
+            buffer.resize(5, 10);
+            // Line reflowed: "ABCDE" and "FGHIJ"
+            buffer.resize(20, 10);
+            // Each row remains separate after widening
+            String full = buffer.getFullContent();
+            assertTrue(full.contains("ABCDE"));
+            assertTrue(full.contains("FGHIJ"));
+        }
+
+        @Test
+        void resizeWithScrollbackAndScreen() {
+            // Fill screen
+            for (int i = 0; i < HEIGHT; i++) {
+                buffer.setCursorPosition(i, 0);
+                buffer.writeText(String.valueOf((char) ('A' + i)).repeat(WIDTH));
+            }
+            // Push 3 lines to scrollback
+            for (int i = 0; i < 3; i++) {
+                buffer.insertLineAtBottom();
+            }
+
+            buffer.resize(WIDTH + 5, HEIGHT + 5);
+            String full = buffer.getFullContent();
+            // All original lines (A-E rows) should be present
+            for (int i = 0; i < HEIGHT; i++) {
+                char ch = (char) ('A' + i);
+                assertTrue(full.contains(String.valueOf(ch).repeat(WIDTH)),
+                        "Missing row of '" + ch + "' after resize");
+            }
+        }
+    }
 }
