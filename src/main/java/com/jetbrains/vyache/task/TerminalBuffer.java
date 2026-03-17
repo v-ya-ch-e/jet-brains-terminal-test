@@ -712,7 +712,8 @@ public class TerminalBuffer {
      * continues to point at the same logical content after the shift.
      */
     public void insertLineAtBottom() {
-        scrollback.add(screen[0]);
+        if(scrollback.size() != 0 || !isLineEmpty(screen[0]))
+            scrollback.add(screen[0]);
         for(int i = 0; i < height - 1; i++) {
             screen[i] = screen[i + 1];
         }
@@ -752,6 +753,11 @@ public class TerminalBuffer {
         }
     }
 
+    /**
+     * Returns {@code true} if every cell in the row is {@link Cell#isEmpty() empty}.
+     * Used by {@link #resize} to detect blank lines that still need a scroll trigger
+     * even though {@link #writeTextWithoutEmpty(Cell[])} produces no output for them.
+     */
     private boolean isLineEmpty(Cell[] line) {
         for (Cell c : line) {
             if(!c.isEmpty()) return false;
@@ -777,8 +783,11 @@ public class TerminalBuffer {
      *       width, long lines automatically wrap onto multiple rows during replay.
      *       If the new width is wider, previously wrapped lines will not be
      *       re-joined — each source row remains a separate unit.</li>
-     *   <li><strong>Cursor position:</strong> the cursor tries to stay in the same position,
-     *       but it may differ from its pre-resize position if the new width is narrower than the old width.</li>
+     *   <li><strong>Empty lines preserved:</strong> all-empty source rows are detected by
+     *       {@code isLineEmpty} and still trigger a scroll, so blank lines in the
+     *       middle of content survive the resize.</li>
+     *   <li><strong>Cursor position:</strong> the cursor keeps its pre-resize (row, col)
+     *       if it fits the new dimensions, otherwise it is clamped to the new bounds.</li>
      * </ul>
      *
      * @param width             new number of columns (must be &gt; 0)
@@ -800,6 +809,7 @@ public class TerminalBuffer {
             newTerminal.setCursorPosition(height-1, 0);
             newTerminal.writeTextWithoutEmpty(screen[i]);
             if(isLineEmpty(screen[i]) || (newTerminal.cursor.isAtLastLine() && newTerminal.cursor.getCol() != 0)) {
+                if(i == getHeight() - 1) continue;
                 newTerminal.insertLineAtBottom();
             }
         }

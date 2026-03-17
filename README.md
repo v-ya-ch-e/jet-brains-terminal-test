@@ -234,8 +234,9 @@ The entire implementation uses only the Java standard library. JUnit 5 is the so
 - **Scrollback limit change:** the new ring buffer enforces the new limit during replay.
 
 **Trade-offs:**
+- **Empty lines are preserved:** a helper (`isLineEmpty`) detects all-empty source rows and still triggers a scroll for them, so blank lines in the middle of content survive the resize.
 - **Wrapped lines are not re-joined:** when widening, a line that was previously soft-wrapped across two rows remains two separate rows instead of being merged back into one. This is because the buffer does not track soft-wrap vs. hard-wrap boundaries.
-- **Cursor position is not accurate kept:** the cursor tries to end in the same position as before, but it may differ from its pre-resize position. 
+- **Cursor position is clamped:** the cursor keeps its pre-resize (row, col) if it fits the new dimensions, otherwise it is clamped to the new bounds. It does not track which logical content line it was on.
 - **O(scrollback + screen) cost:** replay touches every stored cell. For typical terminal sizes this is negligible, but for extremely large scrollback buffers it can be noticeable.
 
 ### 10. Custom-char overloads for content access
@@ -248,7 +249,7 @@ The entire implementation uses only the Java standard library. JUnit 5 is the so
 
 ## Test coverage
 
-The test suite (`TerminalBufferTest`) contains **140 tests** organized into nested classes:
+The test suite (`TerminalBufferTest`) contains **181 tests** organized into nested classes:
 
 | Group | Tests | Coverage focus |
 |-------|-------|----------------|
@@ -267,6 +268,13 @@ The test suite (`TerminalBufferTest`) contains **140 tests** organized into nest
 | `EdgeCases` | 13 | 1×1 buffer, exact fills, foreign cursor, zero scrollback |
 | `IntegrationScenarios` | 6 | Multi-step workflows, attribute survival across scrolling |
 | `CursorOffsetTo` | 7 | Linear offset calculation, null/foreign buffer guards |
+| `CustomCharOverloads` | 8 | Custom empty/undefined char overloads for all content-access methods |
+| `ResizeDimensions` | 5 | Width/height/scrollback-limit updates, grid size |
+| `ResizeContentPreservation` | 8 | Content survival, reflow on narrow, scrollback + screen order, attributes |
+| `ResizeBlankLines` | 2 | Empty lines between content preserved, trailing empty lines |
+| `ResizeCursorPosition` | 4 | Cursor clamping and preservation across resize |
+| `ResizeScrollbackLimit` | 2 | Increasing/reducing scrollback limit during resize |
+| `ResizeEdgeCases` | 10 | 1×1 buffers, double resize, narrow→wide, very large dimensions |
 
 ---
 
