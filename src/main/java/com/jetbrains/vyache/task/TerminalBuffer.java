@@ -58,11 +58,11 @@ import java.util.Queue;
  */
 public class TerminalBuffer {
 
-    private final int width;
-    private final int height;
-    private final int maxScrollbackSize;
-    private final Cell[][] screen;
-    private final ScrollbackRingBuffer scrollback;
+    private int width;
+    private int height;
+    private int maxScrollbackSize;
+    private Cell[][] screen;
+    private ScrollbackRingBuffer scrollback;
     private final Cursor cursor;
     private final char DEFAULT_EMPTY_CHAR;
     private final char DEFAULT_UNDEFINED_CHAR;
@@ -302,6 +302,10 @@ public class TerminalBuffer {
 
     // ─── Content access — screen ───────────────────────────────────
 
+    public Cell[][] getScreen() {
+        return this.screen;
+    }
+
     /**
      * Returns the {@link Cell} at the given screen position.
      *
@@ -366,6 +370,13 @@ public class TerminalBuffer {
         return cellLine[col].attributes();
     }
 
+    public char getScreenCharAt(int row, int col, char customEmptyChar, char customUndefinedChar) {
+        Cell cell = getCellAt(row, col);
+        if(cell == null) return customUndefinedChar;
+        if(cell.isEmpty()) return customEmptyChar;
+        return cell.character();
+    }
+
     /**
      * Returns the character at a screen position.
      *
@@ -375,10 +386,14 @@ public class TerminalBuffer {
      *         or {@link #getDefaultUndefinedChar()} if out of bounds
      */
     public char getScreenCharAt(int row, int col) {
-        Cell cell = getCellAt(row, col);
-        if(cell == null) return DEFAULT_UNDEFINED_CHAR;
-        if(cell.isEmpty()) return DEFAULT_EMPTY_CHAR;
-        return cell.character();
+        return getScreenCharAt(row, col, DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
+    }
+
+    public char getScrollbackCharAt(int row, int col, char customEmptyChar, char customUndefinedChar) {
+        Cell[] cellLine = scrollback.getElement(row);
+        if(cellLine == null || col < 0 || col >= cellLine.length) return customUndefinedChar;
+        if(cellLine[col].isEmpty()) return customEmptyChar;
+        return cellLine[col].character();
     }
 
     /**
@@ -390,10 +405,15 @@ public class TerminalBuffer {
      *         or {@link #getDefaultUndefinedChar()} if out of bounds
      */
     public char getScrollbackCharAt(int row, int col) {
-        Cell[] cellLine = scrollback.getElement(row);
-        if(cellLine == null || col < 0 || col >= cellLine.length) return DEFAULT_UNDEFINED_CHAR;
-        if(cellLine[col].isEmpty()) return DEFAULT_EMPTY_CHAR;
-        return cellLine[col].character();
+        return getScrollbackCharAt(row, col, DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
+    }
+
+    public String getScreenLineAsString(int row, char customEmptyChar, char customUndefinedChar) {
+        StringBuilder line = new StringBuilder();
+        for(int i = 0; i < width; i++) {
+            line.append(getScreenCharAt(row, i, customEmptyChar, customUndefinedChar));
+        }
+        return line.toString();
     }
 
     /**
@@ -403,9 +423,13 @@ public class TerminalBuffer {
      * @return the row as a string of exactly {@link #getWidth()} characters
      */
     public String getScreenLineAsString(int row) {
+        return getScreenLineAsString(row, DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
+    }
+
+    public String getScrollbackLineAsString(int row, char customEmptyChar, char customUndefinedChar) {
         StringBuilder line = new StringBuilder();
         for(int i = 0; i < width; i++) {
-            line.append(getScreenCharAt(row, i));
+            line.append(getScrollbackCharAt(row, i, customEmptyChar, customUndefinedChar));
         }
         return line.toString();
     }
@@ -417,11 +441,16 @@ public class TerminalBuffer {
      * @return the row as a string of exactly {@link #getWidth()} characters
      */
     public String getScrollbackLineAsString(int row) {
-        StringBuilder line = new StringBuilder();
-        for(int i = 0; i < width; i++) {
-            line.append(getScrollbackCharAt(row, i));
+        return getScrollbackLineAsString(row, DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
+    }
+
+    public String getScreenContent(char customEmptyChar, char customUndefinedChar) {
+        StringBuilder content = new StringBuilder();
+        for(int i = 0; i < height; i++) {
+            content.append(getScreenLineAsString(i, customEmptyChar, customUndefinedChar));
+            content.append("\n");
         }
-        return line.toString();
+        return content.toString();
     }
 
     /**
@@ -433,9 +462,13 @@ public class TerminalBuffer {
      * @return the screen content
      */
     public String getScreenContent() {
+        return getScreenContent(DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
+    }
+
+    public String getScrollbackContent(char customEmptyChar, char customUndefinedChar) {
         StringBuilder content = new StringBuilder();
-        for(int i = 0; i < height; i++) {
-            content.append(getScreenLineAsString(i));
+        for(int i = 0; i < scrollback.size(); i++) {
+            content.append(getScrollbackLineAsString(i, customEmptyChar, customUndefinedChar));
             content.append("\n");
         }
         return content.toString();
@@ -450,12 +483,11 @@ public class TerminalBuffer {
      * @return the scrollback content
      */
     public String getScrollbackContent() {
-        StringBuilder content = new StringBuilder();
-        for(int i = 0; i < scrollback.size(); i++) {
-            content.append(getScrollbackLineAsString(i));
-            content.append("\n");
-        }
-        return content.toString();
+        return getScrollbackContent(DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
+    }
+
+    public String getFullContent(char customEmptyChar, char customUndefinedChar) {
+        return getScrollbackContent(customEmptyChar, customUndefinedChar) + getScreenContent(customEmptyChar, customUndefinedChar);
     }
 
     /**
@@ -464,7 +496,7 @@ public class TerminalBuffer {
      * @return the full terminal content as a string
      */
     public String getFullContent() {
-        return getScrollbackContent() + getScreenContent();
+        return getFullContent(DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
     }
 
     // ─── Editing — cursor-relative operations ──────────────────────
@@ -648,5 +680,43 @@ public class TerminalBuffer {
     public void clearAll() {
         clearScreen();
         scrollback.clear();
+    }
+
+    private void writeTextWithoutEmpty(Cell[] text) {
+        for (Cell c : text) {
+            if(c.isEmpty()) continue;
+            writeCell(c, cursor);
+        }
+    }
+
+    public void resize(int width, int height, int maxScrollbackSize) {
+        TerminalBuffer newTerminal = new TerminalBuffer(width, height, maxScrollbackSize, 0, 0, cursor.getCurrentAttributes(), DEFAULT_EMPTY_CHAR, DEFAULT_UNDEFINED_CHAR);
+        
+        for(int i = 0; i < getScrollbackSize(); i++) {
+            newTerminal.setCursorPosition(height-1, 0);
+            newTerminal.writeTextWithoutEmpty(scrollback.getElement(i));
+            if(newTerminal.cursor.isAtLastLine() && newTerminal.cursor.getCol() != 0) {
+                newTerminal.insertLineAtBottom();
+            }
+        }
+
+        for(int i = 0; i < getHeight(); i++) {
+            newTerminal.setCursorPosition(height-1, 0);
+            newTerminal.writeTextWithoutEmpty(screen[i]);
+            if(newTerminal.cursor.isAtLastLine() && newTerminal.cursor.getCol() != 0) {
+                newTerminal.insertLineAtBottom();
+            }
+        }
+
+        this.width = width;
+        this.height = height;
+        this.maxScrollbackSize = maxScrollbackSize;
+        this.screen = newTerminal.getScreen();
+        this.cursor.setPosition(newTerminal.cursor.getRow(), newTerminal.cursor.getCol());
+        this.scrollback = newTerminal.scrollback;
+    }
+
+    public void resize(int width, int height) {
+        resize(width, height, maxScrollbackSize);
     }
 }
