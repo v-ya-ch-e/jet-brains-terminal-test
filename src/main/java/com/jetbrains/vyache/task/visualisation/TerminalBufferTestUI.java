@@ -92,6 +92,11 @@ public class TerminalBufferTestUI extends JFrame {
     private final JTextField pwColField  = tf("0", 4, "Performer cursor column");
     private final JTextField pwCharField = tf("", 2, "Character to write at performer position");
 
+    // ===== Resize tab =====
+    private final JTextField rWidthField  = tf("80", 5, "New buffer width in columns");
+    private final JTextField rHeightField = tf("24", 5, "New buffer height in rows");
+    private final JTextField rScrollField = tf("1000", 5, "New maximum scrollback lines (only for 3-arg resize)");
+
     // ===== Constructor =====
     public TerminalBufferTestUI() {
         setTitle("TerminalBuffer Test UI");
@@ -136,6 +141,7 @@ public class TerminalBufferTestUI extends JFrame {
         tabs.addTab("\u2699 Attributes", buildAttributesPanel());
         tabs.addTab("\u2315 Getters", buildGettersPanel());
         tabs.addTab("\u270e Editing", buildEditingPanel());
+        tabs.addTab("\u2922 Resize", buildResizePanel());
         tabs.setPreferredSize(new Dimension(0, 280));
 
         add(buildCreatePanel(), BorderLayout.NORTH);
@@ -392,6 +398,34 @@ public class TerminalBufferTestUI extends JFrame {
         return p;
     }
 
+    private JPanel buildResizePanel() {
+        JPanel p = darkGBPanel("Resize buffer");
+        GridBagConstraints c = gbc();
+
+        c.gridy = 0;
+        addLF(p, c, "New width:", rWidthField);
+        addLF(p, c, "New height:", rHeightField);
+        p.add(btn("Resize (w, h)",
+                "resize(width, height) \u2014 resizes to new dimensions, keeping the current maxScrollbackSize. Content is reflowed.",
+                e -> act(() -> buffer.resize(pi(rWidthField), pi(rHeightField)))), c); c.gridx++;
+
+        c.gridy = 1; c.gridx = 0;
+        addLF(p, c, "New maxScrollback:", rScrollField);
+        p.add(btn("Resize (w, h, maxScrollback)",
+                "resize(width, height, maxScrollbackSize) \u2014 resizes to new dimensions with a new scrollback limit. Content is replayed and reflowed.",
+                e -> act(() -> buffer.resize(pi(rWidthField), pi(rHeightField), pi(rScrollField)))), c); c.gridx++;
+
+        c.gridy = 2; c.gridx = 0;
+        c.gridwidth = GridBagConstraints.REMAINDER;
+        c.fill = GridBagConstraints.HORIZONTAL;
+        JLabel hint = lbl("Tip: long lines reflow (wrap) when narrowing. Previously wrapped lines do not re-join when widening.");
+        hint.setForeground(SUBTEXT0);
+        hint.setFont(hint.getFont().deriveFont(Font.ITALIC));
+        p.add(hint, c);
+
+        return p;
+    }
+
     // ================================================================
     //  Buffer lifecycle
     // ================================================================
@@ -443,6 +477,9 @@ public class TerminalBufferTestUI extends JFrame {
         cRowField.setText(String.valueOf(buffer.getCursorRow()));
         cColField.setText(String.valueOf(buffer.getCursorCol()));
         currentAttrsLbl.setText(String.valueOf(buffer.getCurrentAttributes()));
+        rWidthField.setText(String.valueOf(buffer.getWidth()));
+        rHeightField.setText(String.valueOf(buffer.getHeight()));
+        rScrollField.setText(String.valueOf(buffer.getMaxScrollbackSize()));
 
         termPanel.cachedSbLines = countScrollbackLines();
         termPanel.revalidate();
@@ -692,9 +729,7 @@ public class TerminalBufferTestUI extends JFrame {
 
     private int countScrollbackLines() {
         if (buffer == null) return 0;
-        int n = 0, limit = buffer.getMaxScrollbackSize();
-        while (n < limit && buffer.getScrollbackAttributesAt(n, 0) != null) n++;
-        return n;
+        return buffer.getScrollbackSize();
     }
 
     private static int pi(JTextField f) {
