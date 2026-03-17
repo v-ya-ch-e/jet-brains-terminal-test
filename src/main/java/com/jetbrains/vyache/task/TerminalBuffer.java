@@ -310,20 +310,6 @@ public class TerminalBuffer {
     // ─── Content access — screen ───────────────────────────────────
 
     /**
-     * Returns a direct reference to the internal screen grid.
-     *
-     * <p><strong>Warning:</strong> the returned array is <em>not</em> a defensive copy.
-     * Modifications to it will silently bypass all buffer invariants.  This accessor
-     * exists to support {@link #resize(int, int, int)}, which transplants the grid
-     * from a temporary buffer.  Prefer the cell/line/content getters for read access.
-     *
-     * @return the mutable {@code Cell[height][width]} screen array
-     */
-    public Cell[][] getScreen() {
-        return this.screen;
-    }
-
-    /**
      * Returns the {@link Cell} at the given screen position.
      *
      * @param row screen row
@@ -766,6 +752,13 @@ public class TerminalBuffer {
         }
     }
 
+    private boolean isLineEmpty(Cell[] line) {
+        for (Cell c : line) {
+            if(!c.isEmpty()) return false;
+        }
+        return true;
+    }
+
     /**
      * Resizes the terminal to new dimensions and a new scrollback limit.
      *
@@ -798,7 +791,7 @@ public class TerminalBuffer {
         for(int i = 0; i < getScrollbackSize(); i++) {
             newTerminal.setCursorPosition(height-1, 0);
             newTerminal.writeTextWithoutEmpty(scrollback.getElement(i));
-            if(newTerminal.cursor.isAtLastLine() && newTerminal.cursor.getCol() != 0) {
+            if(isLineEmpty(scrollback.getElement(i)) || (newTerminal.cursor.isAtLastLine() && newTerminal.cursor.getCol() != 0)) {
                 newTerminal.insertLineAtBottom();
             }
         }
@@ -806,7 +799,7 @@ public class TerminalBuffer {
         for(int i = 0; i < getHeight(); i++) {
             newTerminal.setCursorPosition(height-1, 0);
             newTerminal.writeTextWithoutEmpty(screen[i]);
-            if(newTerminal.cursor.isAtLastLine() && newTerminal.cursor.getCol() != 0) {
+            if(isLineEmpty(screen[i]) || (newTerminal.cursor.isAtLastLine() && newTerminal.cursor.getCol() != 0)) {
                 newTerminal.insertLineAtBottom();
             }
         }
@@ -814,7 +807,7 @@ public class TerminalBuffer {
         this.width = width;
         this.height = height;
         this.maxScrollbackSize = maxScrollbackSize;
-        this.screen = newTerminal.getScreen();
+        this.screen = newTerminal.screen;
         this.cursor.setPosition(cursor.getRow(), cursor.getCol());
         this.scrollback = newTerminal.scrollback;
     }
